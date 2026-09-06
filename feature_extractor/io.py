@@ -22,6 +22,12 @@ def read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
             yield value
 
 
+def read_csv(path: Path) -> Iterator[dict[str, Any]]:
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        for value in csv.DictReader(handle):
+            yield dict(value)
+
+
 def write_jsonl(records: Iterable[Mapping[str, Any]], path: Path) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
@@ -43,3 +49,15 @@ def write_csv(records: list[Mapping[str, Any]], path: Path) -> int:
             row = flatten_record(record)
             writer.writerow({key: "" if row.get(key) is None else row.get(key, "") for key in headers})
     return len(records)
+
+
+def write_parquet(records: list[Mapping[str, Any]], path: Path) -> bool:
+    """Write Parquet when pyarrow is installed; return False otherwise."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as parquet
+    except ImportError:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    parquet.write_table(pa.Table.from_pylist([dict(record) for record in records]), path)
+    return True

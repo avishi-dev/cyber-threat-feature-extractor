@@ -28,6 +28,11 @@ def _stddev(values: list[float]) -> float | None:
     return math.sqrt(sum((item - average) ** 2 for item in values) / len(values))
 
 
+def _interarrivals(times: list[float]) -> list[float]:
+    ordered = sorted(times)
+    return [(right - left) * 1000 for left, right in zip(ordered, ordered[1:])]
+
+
 def _entropy(values: list[Any]) -> float:
     if not values:
         return 0.0
@@ -93,11 +98,15 @@ def extract_record(flow: Mapping[str, Any], *, dns: list[Mapping[str, Any]] | No
     byte_count = int(_number(flow.get("bytes")))
     duration_ms = int(_number(flow.get("duration_ms")))
     duration_seconds = max(duration_ms / 1000, 1e-6)
+    src_port, dst_port = flow.get("src_port"), flow.get("dst_port")
     packet_sizes = [_number(x) for x in flow.get("packet_sizes", [])]
+    interarrivals = [_number(x) for x in flow.get("interarrivals_ms", [])] or _interarrivals([_number(x) for x in flow.get("packet_times", [])])
+    source_ports_seen = list(flow.get("source_ports_seen", [])) or ([src_port] if src_port is not None else [])
+    destination_ports_seen = list(flow.get("destination_ports_seen", [])) or ([dst_port] if dst_port is not None else [])
+    destination_hosts_seen = list(flow.get("destination_hosts_seen", [])) or ([flow.get("dst_ip")] if flow.get("dst_ip") else [])
     dns_section, dns_missing = _dns_features(dns or [])
     encrypted_section, encrypted_missing = _encrypted_features(encrypted or [])
     protocol = str(flow.get("protocol") or "unknown").upper()
-    src_port, dst_port = flow.get("src_port"), flow.get("dst_port")
     flow_id = str(flow.get("flow_id", ""))
     record = {
         "schema_version": SCHEMA_VERSION,
@@ -120,14 +129,14 @@ def extract_record(flow: Mapping[str, Any], *, dns: list[Mapping[str, Any]] | No
                          "tcp_syn_ratio": (flow.get("syn_count", 0) / packets) if packets else None,
                          "handshake_observed": bool(flow.get("tcp_handshake_observed", False)),
                          "established_evidence": bool(flow.get("tcp_established_evidence", False))},
-        "behavioral": {"unique_destination_ports": flow.get("unique_destination_ports", 1 if dst_port else 0),
-                       "unique_destination_hosts": flow.get("unique_destination_hosts", 1 if flow.get("dst_ip") else 0),
-                       "source_port_entropy": flow.get("source_port_entropy", 0.0),
-                       "destination_port_entropy": flow.get("destination_port_entropy", 0.0),
+        "behavioral": {"unique_destination_ports": flow.get("unique_destination_ports", len(set(destination_ports_seen))),
+                       "unique_destination_hosts": flow.get("unique_destination_hosts", len(set(destination_hosts_seen))),
+                       "source_port_entropy": flow.get("source_port_entropy", _entropy(source_ports_seen)),
+                       "destination_port_entropy": flow.get("destination_port_entropy", _entropy(destination_ports_seen)),
                        "source_ip_entropy": flow.get("source_ip_entropy", 0.0),
                        "destination_ip_entropy": flow.get("destination_ip_entropy", 0.0),
-                       "interarrival_mean_ms": flow.get("interarrival_mean_ms"),
-                       "interarrival_stddev_ms": flow.get("interarrival_stddev_ms"),
+                       "interarrival_mean_ms": flow.get("interarrival_mean_ms", _mean(interarrivals)),
+                       "interarrival_stddev_ms": flow.get("interarrival_stddev_ms", _stddev(interarrivals)),
                        "periodicity_score": flow.get("periodicity_score"),
                        "one_way_flow": flow.get("one_way_flow", True),
                        "outbound_inbound_ratio": flow.get("outbound_inbound_ratio")},

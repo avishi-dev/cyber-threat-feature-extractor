@@ -1,6 +1,7 @@
 import csv
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import sys
 
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from feature_extractor.derive import extract_record
 from feature_extractor.io import write_csv, write_jsonl
+from feature_extractor.pcap_input import extract_pcap
 from feature_extractor.schema import flatten_record
 
 
@@ -19,6 +21,7 @@ def flow():
         "dst_port": 443, "protocol": "TCP", "packets": 4, "bytes": 400,
         "duration_ms": 1000, "mean_packet_size": 100, "min_packet_size": 60,
         "max_packet_size": 140, "syn_count": 1, "syn_ack_count": 1,
+        "packet_times": [0.0, 0.1, 0.4, 1.0], "packet_sizes": [60, 100, 140, 100],
     }
 
 
@@ -30,6 +33,7 @@ class ExtractorTests(unittest.TestCase):
         self.assertEqual(record["dns"]["query_length_max"], 30)
         self.assertEqual(record["encrypted_session"]["ja4"], "abc")
         self.assertGreater(record["availability"]["feature_completeness"], 0.9)
+        self.assertEqual(record["behavioral"]["interarrival_mean_ms"], 333.3333333333333)
 
     def test_jsonl_and_csv_preserve_nulls_and_flatten_sections(self):
         record = extract_record(flow())
@@ -45,6 +49,22 @@ class ExtractorTests(unittest.TestCase):
             self.assertEqual(row["volume_packets"], "4")
             self.assertEqual(row["dns_query_length_mean"], "")
             self.assertIn("entity_src_ip", flatten_record(record))
+
+    @patch("feature_extractor.pcap_input._run_tshark")
+    def test_pcap_adapter_groups_packets_and_extracts_dns(self, run_tshark):
+        empty = {field: "" for field in __import__("feature_extractor.pcap_input", fromlist=["FIELDS"]).FIELDS}
+        row = dict(empty, **{
+            "frame.time_epoch": "1700000000.0", "frame.len": "80", "ip.src": "10.10.1.11",
+            "ip.dst": "10.10.1.12", "ip.proto": "17", "udp.srcport": "53000",
+            "udp.dstport": "53", "dns.qry.name": "abc123.sih.test", "dns.qry.type": "1",
+            "dns.flags.rcode": "0", "dns.count.answers": "1",
+        })
+        run_tshark.return_value = [row]
+        flows, dns, encrypted = extract_pcap(__import__("pathlib").Path("sample.pcap"), "S3-001")
+        self.assertEqual(len(flows), 1)
+        self.assertEqual(flows[0]["dst_port"], 53)
+        self.assertEqual(len(dns[flows[0]["flow_id"]]), 1)
+        self.assertFalse(encrypted)
 
 
 if __name__ == "__main__":
