@@ -1,0 +1,44 @@
+"""Command-line entry point for JSONL and CSV feature extraction."""
+
+from __future__ import annotations
+
+import argparse
+from collections import defaultdict
+from pathlib import Path
+
+from .derive import extract_record
+from .io import read_jsonl, write_csv, write_jsonl
+
+
+def _index_metadata(path: Path | None) -> dict[str, list[dict]]:
+    result: dict[str, list[dict]] = defaultdict(list)
+    if path is None:
+        return result
+    for record in read_jsonl(path):
+        flow_id = record.get("flow_id")
+        if flow_id:
+            result[str(flow_id)].append(record)
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Extract passive cyber-threat features without sending traffic")
+    parser.add_argument("--flows", type=Path, required=True)
+    parser.add_argument("--dns-metadata", type=Path)
+    parser.add_argument("--encrypted-metadata", type=Path)
+    parser.add_argument("--output-jsonl", type=Path, required=True)
+    parser.add_argument("--output-csv", type=Path, required=True)
+    args = parser.parse_args(argv)
+    dns = _index_metadata(args.dns_metadata)
+    encrypted = _index_metadata(args.encrypted_metadata)
+    records = [extract_record(flow, dns=dns.get(str(flow.get("flow_id")), []),
+                              encrypted=encrypted.get(str(flow.get("flow_id")), []),
+                              source_file=str(args.flows)) for flow in read_jsonl(args.flows)]
+    write_jsonl(records, args.output_jsonl)
+    write_csv(records, args.output_csv)
+    print(f"extracted {len(records)} feature records")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

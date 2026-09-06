@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sih.local/schemas/passive-feature-record-1.0.json",
+  "title": "SIH Passive Feature Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version", "run_id", "flow_id", "window_start", "window_end",
+    "entity", "volume", "tcp_behavior", "behavioral", "dns",
+    "encrypted_session", "reconnaissance", "exfiltration", "availability", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "flow_id": {"type": "string", "minLength": 1},
+    "window_start": {"type": ["string", "null"], "format": "date-time"},
+    "window_end": {"type": ["string", "null"], "format": "date-time"},
+    "entity": {"$ref": "#/$defs/object"},
+    "volume": {"$ref": "#/$defs/object"},
+    "tcp_behavior": {"$ref": "#/$defs/object"},
+    "behavioral": {"$ref": "#/$defs/object"},
+    "dns": {"$ref": "#/$defs/object"},
+    "encrypted_session": {"$ref": "#/$defs/object"},
+    "reconnaissance": {"$ref": "#/$defs/object"},
+    "exfiltration": {"$ref": "#/$defs/object"},
+    "availability": {"$ref": "#/$defs/object"},
+    "provenance": {"$ref": "#/$defs/object"}
+  },
+  "$defs": {
+    "object": {"type": "object", "additionalProperties": true}
+  }
+}
