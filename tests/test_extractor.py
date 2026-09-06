@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from feature_extractor.derive import extract_record
 from feature_extractor.io import write_csv, write_jsonl
 from feature_extractor.pcap_input import extract_pcap
+from feature_extractor.windows import aggregate_flows
 from feature_extractor.schema import flatten_record
 
 
@@ -65,6 +66,15 @@ class ExtractorTests(unittest.TestCase):
         self.assertEqual(flows[0]["dst_port"], 53)
         self.assertEqual(len(dns[flows[0]["flow_id"]]), 1)
         self.assertFalse(encrypted)
+
+    def test_window_aggregation_preserves_totals_and_fanout(self):
+        second = dict(flow(), flow_id="flow-2", dst_ip="10.10.1.30", dst_port=80, packets=6, bytes=600)
+        result = aggregate_flows([flow(), second], 5)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["packets"], 10)
+        self.assertEqual(result[0]["bytes"], 1000)
+        self.assertEqual(result[0]["unique_destination_hosts"], 2)
+        self.assertEqual(result[0]["unique_destination_ports"], 2)
 
 
 if __name__ == "__main__":

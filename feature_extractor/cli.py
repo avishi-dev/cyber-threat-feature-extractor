@@ -9,6 +9,7 @@ from pathlib import Path
 from .derive import extract_record
 from .io import read_csv, read_jsonl, write_csv, write_jsonl, write_parquet
 from .pcap_input import extract_pcap
+from .windows import aggregate_flows
 
 
 def _index_metadata(path: Path | None) -> dict[str, list[dict]]:
@@ -32,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-jsonl", type=Path, required=True)
     parser.add_argument("--output-csv", type=Path, required=True)
     parser.add_argument("--output-parquet", type=Path)
+    parser.add_argument("--window-seconds", type=int, default=0,
+                        help="aggregate flows by source into fixed UTC windows; 0 keeps per-flow records")
     args = parser.parse_args(argv)
     if bool(args.flows) == bool(args.pcap):
         parser.error("provide exactly one of --flows or --pcap")
@@ -50,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         source_file = str(args.flows)
         reader = read_csv(args.flows) if args.flows.suffix.lower() == ".csv" else read_jsonl(args.flows)
         flows = list(reader)
+    if args.window_seconds:
+        flows = aggregate_flows(flows, args.window_seconds)
     records = [extract_record(flow, dns=dns.get(str(flow.get("flow_id")), []),
                               encrypted=encrypted.get(str(flow.get("flow_id")), []), source_file=source_file) for flow in flows]
     write_jsonl(records, args.output_jsonl)

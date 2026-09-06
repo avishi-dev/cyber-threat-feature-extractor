@@ -30,6 +30,8 @@ CSV columns are flattened with names such as
 
 Optional Parquet output is enabled with `--output-parquet` when `pyarrow` is
 installed. The extractor never sends traffic or decrypts TLS/QUIC payloads.
+Pass `--window-seconds 5` to aggregate directional flows by source into fixed
+UTC five-second windows; omit it to retain one feature row per flow.
 
 ## Tests
 
